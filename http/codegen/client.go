@@ -37,6 +37,7 @@ func client(genpkg string, svc *httpdesign.ServiceExpr) *codegen.File {
 			{Path: "strconv"},
 			{Path: "strings"},
 			{Path: "sync"},
+			{Path: "time"},
 			{Path: "github.com/gorilla/websocket"},
 			{Path: "goa.design/goa", Name: "goa"},
 			{Path: "goa.design/goa/http", Name: "goahttp"},
@@ -92,7 +93,35 @@ func client(genpkg string, svc *httpdesign.ServiceExpr) *codegen.File {
 				Name:   "client-stream-recv",
 				Source: streamRecvT,
 				Data:   e.ClientStream,
+				FuncMap: map[string]interface{}{
+					"upgradeParams": upgradeParams,
+				},
 			})
+			switch e.ClientStream.Kind {
+			case design.ClientStreamKind:
+				sections = append(sections, &codegen.SectionTemplate{
+					Name:   "client-stream-send",
+					Source: streamSendT,
+					Data:   e.ClientStream,
+					FuncMap: map[string]interface{}{
+						"upgradeParams": upgradeParams,
+					},
+				})
+			case design.BidirectionalStreamKind:
+				sections = append(sections, &codegen.SectionTemplate{
+					Name:   "client-stream-send",
+					Source: streamSendT,
+					Data:   e.ClientStream,
+					FuncMap: map[string]interface{}{
+						"upgradeParams": upgradeParams,
+					},
+				})
+				sections = append(sections, &codegen.SectionTemplate{
+					Name:   "client-stream-close",
+					Source: streamCloseT,
+					Data:   e.ClientStream,
+				})
+			}
 			if e.Method.ViewedResult != nil {
 				sections = append(sections, &codegen.SectionTemplate{
 					Name:   "client-stream-set-view",
@@ -256,9 +285,7 @@ const endpointInitT = `{{ printf "%s returns an endpoint that makes HTTP request
 func (c *{{ .ClientStruct }}) {{ .EndpointInit }}({{ if .MultipartRequestEncoder }}{{ .MultipartRequestEncoder.VarName }} {{ .MultipartRequestEncoder.FuncName }}{{ end }}) goa.Endpoint {
 	var (
 		{{- if .ClientStream }}
-			{{- if not .ClientStream.SendRef }}
 		encodeRequest  = {{ .RequestEncoder }}({{ if .MultipartRequestEncoder }}{{ .MultipartRequestEncoder.InitName }}({{ .MultipartRequestEncoder.VarName }}){{ else }}c.encoder{{ end }})
-			{{- end }}
 		{{- else }}
 			{{- if .RequestEncoder }}
 		encodeRequest  = {{ .RequestEncoder }}({{ if .MultipartRequestEncoder }}{{ .MultipartRequestEncoder.InitName }}({{ .MultipartRequestEncoder.VarName }}){{ else }}c.encoder{{ end }})
